@@ -5,6 +5,7 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import math
 import numpy as np
 
+
 class AplicacionTelescopio:
     def __init__(self, raiz):
         self.raiz = raiz
@@ -12,7 +13,7 @@ class AplicacionTelescopio:
 
         # Definir constantes (Longitudes del espejo y pistones)
         self.L = tk.DoubleVar(value=12.0)  # Largo del espejo
-        self.B = tk.DoubleVar(value=8.0)  # Base del espejo (separación entre pistones)
+        self.B = tk.DoubleVar(value=14.0)  # Base del espejo (separación entre pistones)
         self.D = tk.DoubleVar(value=4.0)  # Longitud mínima de los pistones
         self.d_max = tk.DoubleVar(value=20.0)  # Longitud máxima de los pistones
         self.F = tk.DoubleVar(value=6.0)  # Distancia del foco al extremo izquierdo del espejo principal
@@ -23,6 +24,7 @@ class AplicacionTelescopio:
 
         self.crear_widgets()
         self.calcular_y_dibujar()
+        
 
     def crear_widgets(self):
         # Marco de entrada
@@ -60,20 +62,24 @@ class AplicacionTelescopio:
         self.etiqueta_salida.pack()
 
         # Área de dibujo
-        self.figura = plt.Figure(figsize=(6, 6))
+        self.figura = plt.Figure(figsize=(8, 8))
         self.ax = self.figura.add_subplot(111)
         self.canvas = FigureCanvasTkAgg(self.figura, master=self.raiz)
         self.canvas.get_tk_widget().pack()
 
     def calcular_y_dibujar(self):
-        # Obtener los parámetros de entrada
-        L = self.L.get()
-        B = self.B.get()
-        D = self.D.get()
-        d_max = self.d_max.get()
-        F = self.F.get()
-        Px = self.Px_var.get()
-        Py = self.Py_var.get()
+        try:
+            # Obtener los parámetros de entrada
+            L = self.L.get()
+            B = self.B.get()
+            D = self.D.get()
+            d_max = self.d_max.get()
+            F = self.F.get()
+            Px = self.Px_var.get()
+            Py = self.Py_var.get()
+        except tk.TclError:
+            messagebox.showerror("Error", "Por favor, ingrese valores numéricos válidos.")
+            return
 
         # Validaciones iniciales
         if Py < 0:
@@ -84,9 +90,26 @@ class AplicacionTelescopio:
             messagebox.showerror("Error", "Las longitudes deben ser proporcionales para que el telescopio sea posible.")
             return
 
+        # PARCHE PARA CASO ESPECIAL (0,0)
+        # Caso especial: Px = 0 y Py = 0 
+        if Px == 0 and Py == 0:
+            messagebox.showwarning("Advertencia", "El punto P(0, 0) no genera una visualización válida. Se mostrará una posición de referencia.")
+            Px = 1  # Establecer un valor mínimo para Px
+            Py = 1  # Establecer un valor mínimo para Py
+
+        # Validación de la relación 0 < L < B < d_max
+        if not (0 < L < B < d_max):
+            messagebox.showerror(
+                "Error",
+                "Los parámetros deben cumplir la relación: 0 < L < B < d_max.\n"
+                "Por favor, ajusta los valores para que sean válidos."
+            )
+            return
+        
+
         # Intentar encontrar la posición del espejo donde la proyección perpendicular cae en su punto medio
         encontrado = False
-        for My in np.linspace(Py - L, Py + L, 100):
+        for My in np.linspace(Py - L / 2, Py + L / 2, 500):
             N_x = -Px
             N_y = My - Py
             # Evitar división por cero
@@ -109,14 +132,58 @@ class AplicacionTelescopio:
             # Longitudes de los pistones
             x1 = math.sqrt((espejo_izq_x - (-B/2))**2 + (espejo_izq_y - 0)**2)
             x2 = math.sqrt((espejo_der_x - (B/2))**2 + (espejo_der_y - 0)**2)
+            
+            # Validar que los pistones no se crucen
+            if espejo_izq_y < 0 or espejo_der_y < 0:
+                continue
 
             if D <= x1 <= d_max and D <= x2 <= d_max:
                 encontrado = True
                 break
+            
+        # Validar si P está directamente sobre el espejo
+        #if encontrado and (-B / 2 <= Px <= B / 2) and (Py == My):
+        #    messagebox.showwarning("Advertencia", "El punto P está directamente sobre el espejo. No se actualizará la gráfica.")
+        #    return
 
+        # Validar si los pistones se cruzan
+        # if encontrado and espejo_izq_y > espejo_der_y:
+        #    messagebox.showwarning("Advertencia", "Los pistones se cruzan. No se actualizará la gráfica.")
+        #    return
+        
+
+        # Si no se encontró una solución válida, extender o contraer al máximo permitido
         if not encontrado:
-            messagebox.showwarning("Advertencia", "No se encontraron longitudes válidas para los pistones dentro de los límites establecidos.")
-            return
+            messagebox.showwarning(
+                "Advertencia",
+                "El punto está fuera del rango alcanzable. Se graficará el telescopio en su límite más cercano hacia la dirección del punto."
+            )
+            # Determinar las posiciones del pistón: uno en máxima elongación y otro en mínima
+            x1 = d_max  # Pistón derecho en elongación máxima
+            x2 = D      # Pistón izquierdo en elongación mínima
+
+            # Dirección hacia el punto P
+            theta = math.atan2(Py, Px)
+            D_x = math.cos(theta)
+            D_y = math.sin(theta)
+
+            # Posición de los pistones en los límites máximos/mínimos
+            espejo_izq_x = -B / 2 + x2 * D_x
+            espejo_izq_y = max(0, x2 * D_y)  # Asegurarse de que y no sea negativo
+            espejo_der_x = B / 2 + x1 * D_x
+            espejo_der_y = max(0, x1 * D_y)  # Asegurarse de que y no sea negativo
+
+            # Ajustar el espejo para que respete su longitud fija L
+            espejo_centro_x = (espejo_izq_x + espejo_der_x) / 2
+            espejo_centro_y = (espejo_izq_y + espejo_der_y) / 2
+
+            espejo_izq_x = espejo_centro_x - (L / 2) * D_y
+            espejo_izq_y = max(0, espejo_centro_y + (L / 2) * D_x)  # Asegurar que y no sea negativo
+            espejo_der_x = espejo_centro_x + (L / 2) * D_y
+            espejo_der_y = max(0, espejo_centro_y - (L / 2) * D_x)  # Asegurar que y no sea negativo
+
+            # Ángulo del espejo respecto a la horizontal
+            angulo_espejo = math.degrees(theta)
 
         # Ángulo del espejo respecto a la horizontal
         angulo_espejo = math.degrees(math.atan2(D_y, D_x))
@@ -159,14 +226,18 @@ class AplicacionTelescopio:
         self.ax.set_ylabel('Eje Y')
         self.ax.set_title('Orientación del Espejo Secundario')
         self.ax.legend()
-        self.ax.grid(True)
+        self.ax.grid(True, which='both', linestyle='--', linewidth=0.5)
         self.ax.axis('equal')
 
         # Centrar el telescopio en el origen
-        max_rango = max(abs(B / 2), abs(espejo_izq_x), abs(espejo_der_x), abs(Px), abs(Py)) + 1
-        self.ax.set_xlim(-max_rango, max_rango)
-        self.ax.set_ylim(0, max_rango)
+        x_min = min(-B / 2, espejo_izq_x, Px) - 2  # Margen izquierdo
+        x_max = max(B / 2, espejo_der_x, Px) + 2   # Margen derecho
+        y_min = 0                                  # No permitir valores negativos en Y
+        y_max = max(espejo_izq_y, espejo_der_y, Py) + 2  # Margen superior
 
+        self.ax.set_xlim(x_min, x_max)
+        self.ax.set_ylim(y_min, y_max)
+        
         # Dibujar
         self.canvas.draw()
 
