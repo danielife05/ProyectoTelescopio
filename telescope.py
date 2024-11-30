@@ -24,6 +24,7 @@ class AplicacionTelescopio:
 
         self.crear_widgets()
         self.calcular_y_dibujar()
+        
 
     def crear_widgets(self):
         # Marco de entrada
@@ -67,14 +68,18 @@ class AplicacionTelescopio:
         self.canvas.get_tk_widget().pack()
 
     def calcular_y_dibujar(self):
-        # Obtener los parámetros de entrada
-        L = self.L.get()
-        B = self.B.get()
-        D = self.D.get()
-        d_max = self.d_max.get()
-        F = self.F.get()
-        Px = self.Px_var.get()
-        Py = self.Py_var.get()
+        try:
+            # Obtener los parámetros de entrada
+            L = self.L.get()
+            B = self.B.get()
+            D = self.D.get()
+            d_max = self.d_max.get()
+            F = self.F.get()
+            Px = self.Px_var.get()
+            Py = self.Py_var.get()
+        except tk.TclError:
+            messagebox.showerror("Error", "Por favor, ingrese valores numéricos válidos.")
+            return
 
         # Validaciones iniciales
         if Py < 0:
@@ -100,9 +105,8 @@ class AplicacionTelescopio:
                 "Por favor, ajusta los valores para que sean válidos."
             )
             return
-                
-
         
+
         # Intentar encontrar la posición del espejo donde la proyección perpendicular cae en su punto medio
         encontrado = False
         for My in np.linspace(Py - L / 2, Py + L / 2, 500):
@@ -136,8 +140,18 @@ class AplicacionTelescopio:
             if D <= x1 <= d_max and D <= x2 <= d_max:
                 encontrado = True
                 break
+            
+        # Validar si P está directamente sobre el espejo
+        #if encontrado and (-B / 2 <= Px <= B / 2) and (Py == My):
+        #    messagebox.showwarning("Advertencia", "El punto P está directamente sobre el espejo. No se actualizará la gráfica.")
+        #    return
 
+        # Validar si los pistones se cruzan
+        # if encontrado and espejo_izq_y > espejo_der_y:
+        #    messagebox.showwarning("Advertencia", "Los pistones se cruzan. No se actualizará la gráfica.")
+        #    return
         
+
         # Si no se encontró una solución válida, extender o contraer al máximo permitido
         if not encontrado:
             messagebox.showwarning(
@@ -185,7 +199,6 @@ class AplicacionTelescopio:
         # Dibujar el sistema
         self.dibujar_sistema(x1, x2, Px, Py, L, B, angulo_espejo, espejo_izq_x, espejo_izq_y, espejo_der_x, espejo_der_y)
 
-
     def dibujar_sistema(self, x1, x2, Px, Py, L, B, angulo_espejo, espejo_izq_x, espejo_izq_y, espejo_der_x, espejo_der_y):
         self.ax.clear()
 
@@ -217,11 +230,6 @@ class AplicacionTelescopio:
         self.ax.axis('equal')
 
         # Centrar el telescopio en el origen
-        #max_rango = max(abs(B / 2), abs(espejo_izq_x), abs(espejo_der_x), abs(Px), abs(Py)) + 1
-        #self.ax.set_xlim(-max_rango, max_rango)
-        #self.ax.set_ylim(0, max_rango)
-
-        # Dibujar los ejes 
         x_min = min(-B / 2, espejo_izq_x, Px) - 2  # Margen izquierdo
         x_max = max(B / 2, espejo_der_x, Px) + 2   # Margen derecho
         y_min = 0                                  # No permitir valores negativos en Y
@@ -230,7 +238,7 @@ class AplicacionTelescopio:
         self.ax.set_xlim(x_min, x_max)
         self.ax.set_ylim(y_min, y_max)
         
-        # Draw canvas
+        # Dibujar
         self.canvas.draw()
 
 # Crear la ventana principal
